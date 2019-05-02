@@ -5,11 +5,11 @@ CONFIG -= qt
 
 LIBS += -L$$PWD/lib -lcurl
 
-libcopy.path = $$OUT_PWD/debug/
-libcopy.files = $$PWD/lib/libcurl-x64.dll
-
-INSTALLS += \
-    libcopy
+copydir.commands = $(COPY_DIR) $$shell_path($$PWD/skeleton) $$shell_path($$OUT_PWD)
+first.depends = $(first) copydir
+export(first.depends)
+export(copydir.commands)
+QMAKE_EXTRA_TARGETS += first copydir
 
 HEADERS += \
     curl/curl.h \

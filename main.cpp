@@ -34,10 +34,15 @@ void WriteLog(const string &message);
 
 void Terminate();
 
-const string BasePath = "C:\\temp\\ipupdater\\";
-const string LogPath = BasePath + "logs\\";
-const string ConfigPath = BasePath + "updater.conf";
-const string LastIpPath = BasePath + "lastip";
+#if __WIN32
+const string LogPath = "logs\\";
+const string ConfigPath = "updater.conf";
+const string LastIpPath = "lastip";
+#else
+const string LogPath = "logs/";
+const string ConfigPath = "updater.conf";
+const string LastIpPath = "lastip";
+#endif
 
 int main()
 {
@@ -117,7 +122,6 @@ void WriteLog(const string &message)
 
     string logFileName;
     logFileName.append(LogPath);
-    logFileName.append("\\");
     logFileName.append(ostring.str());
     logFileName.append(".log");
 
@@ -128,8 +132,14 @@ void WriteLog(const string &message)
 
     if (logFile.fail())
     {
-        cout << "ERROR: Failed to open log file." << endl;
-        throw new exception;
+        cout << "Failed to open log file. Trying to create new one." << endl;
+        logFile.open(logFileName);
+
+        if (logFile.fail())
+        {
+            cout << "Failed to create log file, aborting.." << endl;
+            throw new exception;
+        }
     }
 
     ostring << std::put_time(std::localtime(&now), stampFormat) << message;
@@ -254,8 +264,11 @@ void UpdateIp(const updater::ip &ip, const string &url, const string &apikey, co
         resp += strBuf + " ";
     }
 
-    if (resp.length() > 5)
-        WriteLog(resp);
+    if (resp.length() > 10)
+    {
+        WriteLog("Error in update: " + resp);
+        throw new exception;
+    }
 }
 
 updater::ip QueryCurrentIp(const string &url)

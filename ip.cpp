@@ -22,7 +22,7 @@ ip::ip(std::string dotted_decimal)
     unsigned int d = std::stoul(dotted_decimal);
     decimals.push_back(d);
 
-    if (decimals.size() != 4) throw new std::exception();
+    if (decimals.size() != 4) throw new std::exception;
 
     _a = decimals[0];
     _b = decimals[1];
