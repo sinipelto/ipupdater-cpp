@@ -1,0 +1,30 @@
+#ifndef IP_H
+#define IP_H
+
+#include <string>
+#include <list>
+#include <exception>
+#include <vector>
+
+namespace updater {
+
+class ip
+{
+public:
+    ip(std::string dotted_decimal);
+    ip(const unsigned char &a, const unsigned char &b, const unsigned char &c, const unsigned char &d);
+    std::string toString() const;
+    std::vector<unsigned char> getDecimals() const;
+    bool operator==(const ip &other) const;
+private:
+    std::string _value;
+    unsigned char _a;
+    unsigned char _b;
+    unsigned char _c;
+    unsigned char _d;
+};
+
+}
+
+
+#endif // IP_H
