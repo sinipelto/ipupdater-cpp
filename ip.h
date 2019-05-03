@@ -17,7 +17,6 @@ public:
     std::vector<unsigned char> getDecimals() const;
     bool operator==(const ip &other) const;
 private:
-    std::string _value;
     unsigned char _a;
     unsigned char _b;
     unsigned char _c;
