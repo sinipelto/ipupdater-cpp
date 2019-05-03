@@ -50,18 +50,10 @@ HEADERS += \
     ip.h
 
 SOURCES += \
-    curlpp/internal/CurlHandle.inl \
-    curlpp/internal/OptionContainer.inl \
-    curlpp/internal/OptionSetter.inl \
-    curlpp/Easy.inl \
-    curlpp/Info.inl \
-    curlpp/Option.inl \
     internal/CurlHandle.cpp \
     internal/OptionList.cpp \
     internal/OptionSetter.cpp \
     internal/SList.cpp \
-#    utilspp/ThreadingFactoryMutex.inl \
-#    utilspp/ThreadingSingle.inl \
     cURLpp.cpp \
     Easy.cpp \
     Exception.cpp \
