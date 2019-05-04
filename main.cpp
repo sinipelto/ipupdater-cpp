@@ -21,39 +21,52 @@
 
 using namespace std;
 
-map<string, string> ReadConfiguration(const string& path);
+void ProcessPath(string rawPath, const string *outPath);
 
-updater::ip ReadIpFromFile(const string& path);
-updater::ip QueryIpFromUrl(const string &url, const bool &clean_result);
+map<string, string> *ReadConfiguration(const string * const path);
 
-void UpdateIp(const updater::ip &ip, const string &url, const string &apikey, const string &apisecret);
-void SaveIpToFile(const updater::ip &ip, const string &path);
+const updater::ip *ReadIpFromFile(const string * const path);
+const updater::ip *QueryIpFromUrl(const string &url, const bool &clean_result);
+
+void UpdateIp(const updater::ip * const ip, const string &url, const string &apikey, const string &apisecret);
+void SaveIpToFile(const updater::ip * const ip, const string * const path);
 
 std::pair<string, string> ParseLine(const string &line);
 bool ParseBool(const string &input);
 
 void WriteLog(const string &message);
 
-void Terminate();
+int Terminate();
 
 #if __WIN32
-const string LogPath = "logs\\";
-const string ConfigPath = "updater.conf";
-const string LastIpPath = "lastip";
+static string LogPath = "logs\\";
 #else
-const string LogPath = "logs/";
-const string ConfigPath = "updater.conf";
-const string LastIpPath = "lastip";
+static string LogPath = "logs/";
 #endif
 
-int main()
+
+int main(int argc, char **argv)
 {
     //    curlpp::initialize(CURL_GLOBAL_ALL);
 
-    map<string, string> config;
+    const string *basePath = nullptr;
+
+#if __WIN32
+    basePath = new string("");
+#else
+    ProcessPath(argv[0], basePath);
+#endif
+
+    const string * const configPath = new string(*basePath + "updater.conf");
+    const string * const lastIpPath = new string(*basePath + "lastip");
+    LogPath = *basePath + LogPath;
+
+    delete basePath;
+
+    map<string, string> *config;
 
     try {
-        config = ReadConfiguration(ConfigPath);
+        config = ReadConfiguration(configPath);
     } catch (const exception& e) {
         string msg = "";
         msg.append("Failed to read configuration: ");
@@ -62,24 +75,29 @@ int main()
         throw;
     }
 
-    string domain = config["domain"];
-    string api_key = config["api_key"];
-    string api_secret = config["api_secret"];
+    delete configPath;
 
-    string ip_url = config["ip_url"];
-    string api_url_base = config["api_url"];
+    const string domain = config->at("domain");
+    const string api_key = config->at("api_key");
+    const string api_secret = config->at("api_secret");
 
-    bool use_router_info = ParseBool(config["use_router_info"]);
-    string router_url = config["router_url"];
-    string router_username = config["router_username"];
-    string router_password = config["router_password"];
-    string router_keyword = config["router_keyword"];
+    const string ip_url = config->at("ip_url");
+    const string api_url_base = config->at("api_url");
+
+    const bool use_router_info = ParseBool(config->at("use_router_info"));
+    const string router_url = config->at("router_url");
+    const string router_username = config->at("router_username");
+    const string router_password = config->at("router_password");
+    const string router_keyword = config->at("router_keyword");
+
+    // Free configuration map memory
+    delete config;
 
     // Load last ip
-    auto local_ip = ReadIpFromFile(LastIpPath);
+    auto local_ip = ReadIpFromFile(lastIpPath);
 
     // Query current ip
-    updater::ip remote_ip;
+    const updater::ip *remote_ip;
 
     if (use_router_info)
     {
@@ -94,16 +112,22 @@ int main()
     // Compare IPs
     if (local_ip == remote_ip) {
         WriteLog("IP not changed, exiting without changes.");
-        Terminate();
-        return 0;
+
+        delete lastIpPath;
+        delete local_ip;
+        delete remote_ip;
+
+        return Terminate();
     }
 
     WriteLog("IP address changed from last record, updating the new ip..");
-    WriteLog("Old IP: " + local_ip.toString());
-    WriteLog("New IP: " + remote_ip.toString());
+    WriteLog("Old IP: " + local_ip->toString());
+    WriteLog("New IP: " + remote_ip->toString());
+
+    delete local_ip;
 
     // Create api url
-    auto api_url = api_url_base + "/" + domain + "/records/A/@";
+    const string &api_url = api_url_base + "/" + domain + "/records/A/@";
 
     // If changed, update to server with new ip
     UpdateIp(remote_ip, api_url, api_key, api_secret);
@@ -111,14 +135,27 @@ int main()
     WriteLog("IP updated to server successfully.");
 
     // Write down new ip to file
-    SaveIpToFile(remote_ip, LastIpPath);
+    SaveIpToFile(remote_ip, lastIpPath);
+    delete remote_ip;
+    delete lastIpPath;
 
     WriteLog("Local IP record updated successfully.");
 
     // Terminate curlpp
-    Terminate();
+    return Terminate();
+}
 
-    return 0;
+void ProcessPath(string rawPath, const string *outPath)
+{
+    auto it = rawPath.rbegin();
+
+    while (*it != '/')
+    {
+        rawPath.pop_back();
+        it++;
+    }
+
+    outPath = new string(rawPath);
 }
 
 bool ParseBool(const string &input)
@@ -141,9 +178,10 @@ bool ParseBool(const string &input)
     return false;
 }
 
-void Terminate()
+int Terminate()
 {
     curlpp::terminate();
+    return 0;
 }
 
 void WriteLog(const string &message)
@@ -205,16 +243,17 @@ std::pair<string, string> ParseLine(const string &line)
     return keyvalue;
 }
 
-map<string, string> ReadConfiguration(const string& path)
+map<string, string> *ReadConfiguration(const string * const path)
 {
-    map<string, string> settings = {};
+    map<string, string> *settings = new map<string, string>();
 
     ifstream file;
-    file.open(path);
+    file.open(*path);
 
     if (file.fail())
     {
         WriteLog("Could not open configuration file (updater.conf).");
+        delete path;
         throw new exception;
     }
 
@@ -225,7 +264,7 @@ map<string, string> ReadConfiguration(const string& path)
         else if (line.size() < 3) continue; // Format: a=b is minimum of 3
 
         auto parsed = ParseLine(line);
-        settings[parsed.first] = parsed.second;
+        settings->operator[](parsed.first) = parsed.second;
     }
 
     file.close();
@@ -233,20 +272,21 @@ map<string, string> ReadConfiguration(const string& path)
     return settings;
 }
 
-updater::ip ReadIpFromFile(const string& path)
+const updater::ip *ReadIpFromFile(const string * const path)
 {
     ifstream file;
-    file.open(path);
+    file.open(*path);
 
     if (file.fail())
     {
         WriteLog("Failed to open IP record file. Trying to create new one with null record.");
 
         ofstream out;
-        out.open(path);
+        out.open(*path);
 
         if (out.fail()) {
             WriteLog("Failed to create ip record. Cannot continue.");
+            delete path;
             throw new exception;
         }
 
@@ -255,7 +295,7 @@ updater::ip ReadIpFromFile(const string& path)
 
         WriteLog("New IP record file written, continuing as normal.");
 
-        file.open(path);
+        file.open(*path);
     }
 
     string line;
@@ -274,17 +314,17 @@ updater::ip ReadIpFromFile(const string& path)
         throw;
     }
 
-    return *addr;
+    return addr;
 }
 
-void UpdateIp(const updater::ip &ip, const string &url, const string &apikey, const string &apisecret)
+void UpdateIp(const updater::ip * const ip, const string &url, const string &apikey, const string &apisecret)
 {
     curlpp::Easy handle;
 
     std::stringstream buffer;
 
     auto authOpt = curlpp::options::HttpHeader({"Content-Type: application/json", "Authorization: sso-key " + apikey + ":" + apisecret});
-    auto dataOpt = curlpp::Options::PostFields("[{\"data\":\"" + ip.toString() + "\"}]");
+    auto dataOpt = curlpp::Options::PostFields("[{\"data\":\"" + ip->toString() + "\"}]");
 
     handle.setOpt(curlpp::Options::Url(url));
     handle.setOpt(curlpp::Options::CustomRequest("PUT"));
@@ -306,11 +346,12 @@ void UpdateIp(const updater::ip &ip, const string &url, const string &apikey, co
     if (resp.length() > 10)
     {
         WriteLog("Error in update: " + resp);
+        delete ip;
         throw new exception;
     }
 }
 
-updater::ip QueryIpFromUrl(const string &url, const bool &clean_result)
+const updater::ip *QueryIpFromUrl(const string &url, const bool &clean_result)
 {
     if (!clean_result)
     {
@@ -346,20 +387,21 @@ updater::ip QueryIpFromUrl(const string &url, const bool &clean_result)
         throw;
     }
 
-    return *addr;
+    return addr;
 }
 
-void SaveIpToFile(const updater::ip &ip, const string &path)
+void SaveIpToFile(const updater::ip * const ip, const string * const path)
 {
     ofstream file;
-    file.open(path, ios::out);
+    file.open(*path, ios::out);
 
     if (file.fail()) {
         WriteLog("Failed to open ip record file. Ensure necessary resources are available for operation.");
+        delete path;
         throw new exception;
     }
 
-    file << ip.toString();
+    file << ip->toString();
 
     file.close();
 }
