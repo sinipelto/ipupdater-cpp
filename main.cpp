@@ -33,6 +33,7 @@ void SaveIpToFile(const updater::ip * const ip, const string * const path);
 
 std::pair<string, string> ParseLine(const string &line);
 bool ParseBool(const string &input);
+vector<string> ParseList(string input, const string &delimiter);
 
 void WriteLog(const string &message);
 
@@ -81,6 +82,8 @@ int main(int argc, char **argv)
     const string api_key = config->at("api_key");
     const string api_secret = config->at("api_secret");
 
+    const vector<string> record_list = ParseList(config->at("record_list"), ",");
+
     const string ip_url = config->at("ip_url");
     const string api_url_base = config->at("api_url");
 
@@ -93,8 +96,8 @@ int main(int argc, char **argv)
     // Free configuration map memory
     delete config;
 
-    // Load last ip
-    auto local_ip = ReadIpFromFile(lastIpPath);
+    // Load last ip from record file
+    const updater::ip *local_ip = ReadIpFromFile(lastIpPath);
 
     // Query current ip
     const updater::ip *remote_ip;
@@ -110,14 +113,13 @@ int main(int argc, char **argv)
     }
 
     // Compare IPs
-    if (local_ip == remote_ip) {
+    if (*local_ip == *remote_ip) {
         WriteLog("IP not changed, exiting without changes.");
 
         delete lastIpPath;
         delete local_ip;
         delete remote_ip;
 
-        WRITE_EXIT;
         return Terminate();
     }
 
@@ -127,23 +129,38 @@ int main(int argc, char **argv)
 
     delete local_ip;
 
-    // Create api url
-    const string &api_url = api_url_base + "/" + domain + "/records/A/@";
+    if (record_list.size() <= 0)
+    {
+        delete remote_ip;
+        delete lastIpPath;
 
-    // If changed, update to server with new ip
-    UpdateIp(remote_ip, api_url, api_key, api_secret);
+        WriteLog("No records to process. Exiting..");
 
-    WriteLog("IP updated to server successfully.");
+        return Terminate();
+    }
+
+    for (const string& type : record_list)
+    {
+        // Create api url
+        const string &api_url = api_url_base + "/" + domain + "/records/A/" + type;
+
+        // If changed, update to server with new ip
+        UpdateIp(remote_ip, api_url, api_key, api_secret);
+
+        WriteLog(type + " record updated successfully.");
+    }
+
+    WriteLog("IP records updated to server successfully.");
 
     // Write down new ip to file
     SaveIpToFile(remote_ip, lastIpPath);
+
     delete remote_ip;
     delete lastIpPath;
 
     WriteLog("Local IP record updated successfully.");
 
-    // Terminate curlpp
-    WRITE_EXIT;
+    // Terminate curlpp and exit
     return Terminate();
 }
 
@@ -180,9 +197,30 @@ bool ParseBool(const string &input)
     return false;
 }
 
+vector<string> ParseList(string input, const string &delimiter)
+{
+    std::vector<string> options = {};
+
+    size_t pos = 0;
+    while ((pos = input.find(delimiter)) != std::string::npos)
+    {
+        std::string token = input.substr(0, pos);
+        input.erase(0, pos + delimiter.length());
+
+        if (token == "") continue;
+
+        options.push_back(token);
+    }
+
+    if (input != "") options.push_back(input);
+
+    return options;
+}
+
 int Terminate()
 {
     curlpp::terminate();
+    WRITE_EXIT;
     return 0;
 }
 
@@ -237,8 +275,9 @@ std::pair<string, string> ParseLine(const string &line)
     {
         if (line[i] == '=')
         {
-            keyvalue.first = line.substr(0, i);
-            keyvalue.second = line.substr(i+1, line.size()-1);
+            keyvalue.first = line.substr(0, i); // [sdfjsd=], = excluded
+            keyvalue.second = line.substr(i+1, line.size()-1); // [sdfsahdds\n], \n excluded
+            break; // Only first = is parsed
         }
     }
 
@@ -282,7 +321,7 @@ const updater::ip *ReadIpFromFile(const string * const path)
 
     if (file.fail())
     {
-        WriteLog("Failed to open IP record file. Trying to create new one with null record.");
+        WriteLog("Failed to open IP record file. Trying to create new one with zero record.");
 
         ofstream out;
         out.open(*path);
@@ -297,9 +336,8 @@ const updater::ip *ReadIpFromFile(const string * const path)
         out << "0.0.0.0";
         out.close();
 
-        WriteLog("New IP record file written, continuing as normal.");
-
-        file.open(*path);
+        WriteLog("New IP record file written, returning with zero record.");
+        return new updater::ip(0, 0, 0, 0);
     }
 
     string line;
