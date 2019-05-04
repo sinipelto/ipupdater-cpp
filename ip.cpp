@@ -10,20 +10,22 @@ ip::ip(std::string dotted_decimal)
 {
     std::vector<unsigned char> decimals = {};
 
-    std::string delimiter = ".";
+    const std::string delimiter = ".";
     size_t pos = 0;
+
+    unsigned d;
 
     while ((pos = dotted_decimal.find(delimiter)) != std::string::npos)
     {
         std::string token = dotted_decimal.substr(0, pos);
+        d = std::stoul(token);
 
-        unsigned int decimal = std::stoul(token);
-        decimals.push_back(decimal);
+        decimals.push_back(d);
 
         dotted_decimal.erase(0, pos + delimiter.length());
     }
 
-    unsigned int d = std::stoul(dotted_decimal);
+    d = std::stoul(dotted_decimal);
     decimals.push_back(d);
 
     if (decimals.size() != 4) throw new std::exception;
