@@ -21,7 +21,7 @@
 
 using namespace std;
 
-void ProcessPath(string rawPath, const string *outPath);
+const string *ProcessPath(string rawPath);
 
 map<string, string> *ReadConfiguration(const string * const path);
 
@@ -39,24 +39,21 @@ void WriteLog(const string &message);
 int Terminate();
 
 #if __WIN32
+const char DELIM = '\\';
 static string LogPath = "logs\\";
 #else
+const char DELIM = '/';
 static string LogPath = "logs/";
 #endif
 
 
 int main(int argc, char **argv)
 {
-    //    curlpp::initialize(CURL_GLOBAL_ALL);
-
-    const string *basePath = nullptr;
-
 #if __WIN32
-    basePath = new string("");
+    const string * const basePath = new string("");
 #else
-    ProcessPath(argv[0], basePath);
+    const string * const basePath = ProcessPath(argv[0]);
 #endif
-
     const string * const configPath = new string(*basePath + "updater.conf");
     const string * const lastIpPath = new string(*basePath + "lastip");
     LogPath = *basePath + LogPath;
@@ -145,17 +142,17 @@ int main(int argc, char **argv)
     return Terminate();
 }
 
-void ProcessPath(string rawPath, const string *outPath)
+const string *ProcessPath(string rawPath)
 {
     auto it = rawPath.rbegin();
 
-    while (*it != '/')
+    while (*it != DELIM)
     {
         rawPath.pop_back();
         it++;
     }
 
-    outPath = new string(rawPath);
+    return new string(rawPath);
 }
 
 bool ParseBool(const string &input)
