@@ -11,6 +11,7 @@
 #include <fstream>
 #include <chrono>
 #include <ctime>
+#include <locale>
 #include <curl/curl.h>
 #include <curlpp/cURLpp.hpp>
 #include <curlpp/Easy.hpp>
@@ -23,12 +24,13 @@ using namespace std;
 map<string, string> ReadConfiguration(const string& path);
 
 updater::ip ReadIpFromFile(const string& path);
-updater::ip QueryCurrentIp(const string &url);
+updater::ip QueryIpFromUrl(const string &url, const bool &clean_result);
 
 void UpdateIp(const updater::ip &ip, const string &url, const string &apikey, const string &apisecret);
 void SaveIpToFile(const updater::ip &ip, const string &path);
 
 std::pair<string, string> ParseLine(const string &line);
+bool ParseBool(const string &input);
 
 void WriteLog(const string &message);
 
@@ -60,17 +62,34 @@ int main()
         throw;
     }
 
-    auto domain = config["domain"];
-    auto api_key = config["api_key"];
-    auto api_secret = config["api_secret"];
-    auto ip_url = config["ip_url"];
-    auto api_url_base = config["api_url"];
+    string domain = config["domain"];
+    string api_key = config["api_key"];
+    string api_secret = config["api_secret"];
+
+    string ip_url = config["ip_url"];
+    string api_url_base = config["api_url"];
+
+    bool use_router_info = ParseBool(config["use_router_info"]);
+    string router_url = config["router_url"];
+    string router_username = config["router_username"];
+    string router_password = config["router_password"];
+    string router_keyword = config["router_keyword"];
 
     // Load last ip
     auto local_ip = ReadIpFromFile(LastIpPath);
 
     // Query current ip
-    auto remote_ip = QueryCurrentIp(ip_url);
+    updater::ip remote_ip;
+
+    if (use_router_info)
+    {
+        WriteLog("Using local router as external ip source..");
+        remote_ip = QueryIpFromUrl(router_url, false);
+    }
+    else {
+        WriteLog("Using external service for fetching ip address..");
+        remote_ip = QueryIpFromUrl(ip_url, true);
+    }
 
     // Compare IPs
     if (local_ip == remote_ip) {
@@ -100,6 +119,26 @@ int main()
     Terminate();
 
     return 0;
+}
+
+bool ParseBool(const string &input)
+{
+    string parsed = "";
+
+    for (char c : input) {
+        if (c == ' ' || c == '\n' || c == '\t' || c == '\r') continue;
+        parsed += std::tolower(c, *new locale());
+    }
+
+    if (parsed == "")
+    {
+        WriteLog("Error: Could not parse boolean value for: " + input + "in configuration.");
+        throw new exception;
+    }
+
+    if (parsed == "yes" || parsed == "y" || parsed == "true") return true;
+
+    return false;
 }
 
 void Terminate()
@@ -271,8 +310,14 @@ void UpdateIp(const updater::ip &ip, const string &url, const string &apikey, co
     }
 }
 
-updater::ip QueryCurrentIp(const string &url)
+updater::ip QueryIpFromUrl(const string &url, const bool &clean_result)
 {
+    if (!clean_result)
+    {
+        WriteLog("Unclean ip fetching not yet implemented. Please use clean source for fetching ip address.");
+        throw new exception;
+    }
+
     curlpp::Easy handle;
 
     std::stringstream buffer;

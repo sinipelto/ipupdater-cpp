@@ -2,6 +2,10 @@
 
 namespace updater {
 
+ip::ip()
+{
+}
+
 ip::ip(std::string dotted_decimal)
 {
     std::vector<unsigned char> decimals = {};
