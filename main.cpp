@@ -38,6 +38,8 @@ void WriteLog(const string &message);
 
 int Terminate();
 
+#define WRITE_EXIT WriteLog("----------------------------------------------------------------")
+
 #if __WIN32
 const char DELIM = '\\';
 static string LogPath = "logs\\";
@@ -69,6 +71,7 @@ int main(int argc, char **argv)
         msg.append("Failed to read configuration: ");
         msg.append(e.what());
         WriteLog(msg);
+        WRITE_EXIT;
         throw;
     }
 
@@ -114,6 +117,7 @@ int main(int argc, char **argv)
         delete local_ip;
         delete remote_ip;
 
+        WRITE_EXIT;
         return Terminate();
     }
 
@@ -139,6 +143,7 @@ int main(int argc, char **argv)
     WriteLog("Local IP record updated successfully.");
 
     // Terminate curlpp
+    WRITE_EXIT;
     return Terminate();
 }
 
@@ -251,6 +256,7 @@ map<string, string> *ReadConfiguration(const string * const path)
     {
         WriteLog("Could not open configuration file (updater.conf).");
         delete path;
+        WRITE_EXIT;
         throw new exception;
     }
 
@@ -284,6 +290,7 @@ const updater::ip *ReadIpFromFile(const string * const path)
         if (out.fail()) {
             WriteLog("Failed to create ip record. Cannot continue.");
             delete path;
+            WRITE_EXIT;
             throw new exception;
         }
 
@@ -308,6 +315,7 @@ const updater::ip *ReadIpFromFile(const string * const path)
         msg.append("Error while parsing last ip from file: ");
         msg.append(e.what());
         WriteLog(msg);
+        WRITE_EXIT;
         throw;
     }
 
@@ -344,6 +352,7 @@ void UpdateIp(const updater::ip * const ip, const string &url, const string &api
     {
         WriteLog("Error in update: " + resp);
         delete ip;
+        WRITE_EXIT;
         throw new exception;
     }
 }
@@ -353,6 +362,7 @@ const updater::ip *QueryIpFromUrl(const string &url, const bool &clean_result)
     if (!clean_result)
     {
         WriteLog("Unclean ip fetching not yet implemented. Please use clean source for fetching ip address.");
+        WRITE_EXIT;
         throw new exception;
     }
 
@@ -381,6 +391,7 @@ const updater::ip *QueryIpFromUrl(const string &url, const bool &clean_result)
         msg.append("Error while parsing current remote ip: ");
         msg.append(e.what());
         WriteLog(msg);
+        WRITE_EXIT;
         throw;
     }
 
@@ -395,10 +406,10 @@ void SaveIpToFile(const updater::ip * const ip, const string * const path)
     if (file.fail()) {
         WriteLog("Failed to open ip record file. Ensure necessary resources are available for operation.");
         delete path;
+        WRITE_EXIT;
         throw new exception;
     }
 
     file << ip->toString();
-
     file.close();
 }
