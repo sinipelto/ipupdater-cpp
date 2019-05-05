@@ -2,7 +2,7 @@
 // Dynamic IP address updater against domain API.
 // Reads and parses configuration parameters from configuration file.
 
-#include "ip.h"
+#include "ip.hh"
 #include <iostream>
 #include <iomanip>
 #include <string>
@@ -21,7 +21,7 @@
 
 using namespace std;
 
-const string *ProcessPath(string rawPath);
+string &ProcessPath(string &path);
 
 map<string, string> *ReadConfiguration(const string * const path);
 
@@ -35,9 +35,9 @@ std::pair<string, string> ParseLine(const string &line);
 bool ParseBool(const string &input);
 vector<string> ParseList(string input, const string &delimiter);
 
-void WriteLog(const string &message);
+void WriteLog(const string &message, const bool &is_error=false);
 
-int Terminate();
+int Terminate(const int &code);
 
 #define WRITE_EXIT WriteLog("----------------------------------------------------------------")
 
@@ -52,16 +52,21 @@ static string LogPath = "logs/";
 
 int main(int argc, char **argv)
 {
-#if __WIN32
-    const string * const basePath = new string("");
-#else
-    const string * const basePath = ProcessPath(argv[0]);
-#endif
-    const string * const configPath = new string(*basePath + "updater.conf");
-    const string * const lastIpPath = new string(*basePath + "lastip");
-    LogPath = *basePath + LogPath;
+    if (argc <= 0)
+    {
+        WriteLog("Error: No path argument given. Aborting.", true);
+        return Terminate(1);
+    }
 
-    delete basePath;
+    string basePath = argv[0];
+#if __WIN32
+    basePath = ProcessPath(ProcessPath(basePath));
+#else
+    basePath = ProcessPath(basePath);
+#endif
+    const string * const configPath = new string(basePath + "updater.conf");
+    const string * const lastIpPath = new string(basePath + "lastip");
+    LogPath = basePath + LogPath;
 
     map<string, string> *config;
 
@@ -71,7 +76,7 @@ int main(int argc, char **argv)
         string msg = "";
         msg.append("Failed to read configuration: ");
         msg.append(e.what());
-        WriteLog(msg);
+        WriteLog(msg, true);
         WRITE_EXIT;
         throw;
     }
@@ -120,7 +125,7 @@ int main(int argc, char **argv)
         delete local_ip;
         delete remote_ip;
 
-        return Terminate();
+        return Terminate(0);
     }
 
     WriteLog("IP address changed from last record, updating the new ip..");
@@ -136,7 +141,7 @@ int main(int argc, char **argv)
 
         WriteLog("No records to process. Exiting..");
 
-        return Terminate();
+        return Terminate(0);
     }
 
     for (const string& type : record_list)
@@ -161,20 +166,28 @@ int main(int argc, char **argv)
     WriteLog("Local IP record updated successfully.");
 
     // Terminate curlpp and exit
-    return Terminate();
+    return Terminate(0);
 }
 
-const string *ProcessPath(string rawPath)
+string &ProcessPath(string &path)
 {
-    auto it = rawPath.rbegin();
+    auto it = path.rbegin();
 
-    while (*it != DELIM)
+    // Remove the first slash
+    if (*it == DELIM)
     {
-        rawPath.pop_back();
+        path.pop_back();
         it++;
     }
 
-    return new string(rawPath);
+    // Keep popping until next slash appears
+    while (*it != DELIM)
+    {
+        path.pop_back();
+        it++;
+    }
+
+    return path;
 }
 
 bool ParseBool(const string &input)
@@ -188,7 +201,7 @@ bool ParseBool(const string &input)
 
     if (parsed == "")
     {
-        WriteLog("Error: Could not parse boolean value for: " + input + "in configuration.");
+        WriteLog("Error: Could not parse boolean value for: " + input + "in configuration.", true);
         throw new exception;
     }
 
@@ -217,14 +230,14 @@ vector<string> ParseList(string input, const string &delimiter)
     return options;
 }
 
-int Terminate()
+int Terminate(const int &code)
 {
     curlpp::terminate();
     WRITE_EXIT;
-    return 0;
+    return code;
 }
 
-void WriteLog(const string &message)
+void WriteLog(const string &message, const bool &is_error)
 {
     // Set time parse format string
     const char *fileFormat = "%Y-%m-%d";
@@ -249,12 +262,12 @@ void WriteLog(const string &message)
 
     if (logFile.fail())
     {
-        cout << "Failed to open log file. Trying to create new one." << endl;
+        cerr << "Failed to open log file. Trying to create new one." << endl;
         logFile.open(logFileName);
 
         if (logFile.fail())
         {
-            cout << "Failed to create log file, aborting.." << endl;
+            cerr << "Failed to create log file, aborting.." << endl;
             throw new exception;
         }
     }
@@ -262,6 +275,11 @@ void WriteLog(const string &message)
     ostring << std::put_time(std::localtime(&now), stampFormat) << message;
 
     logFile << ostring.str() << endl;
+
+    if (is_error) {
+        cerr << std::put_time(std::localtime(&now), stampFormat) << message << endl;
+        return;
+    }
 
     cout << std::put_time(std::localtime(&now), stampFormat) << message << endl;
 }
@@ -293,7 +311,7 @@ map<string, string> *ReadConfiguration(const string * const path)
 
     if (file.fail())
     {
-        WriteLog("Could not open configuration file (updater.conf).");
+        WriteLog("Could not open configuration file (updater.conf).", true);
         delete path;
         WRITE_EXIT;
         throw new exception;
@@ -321,13 +339,13 @@ const updater::ip *ReadIpFromFile(const string * const path)
 
     if (file.fail())
     {
-        WriteLog("Failed to open IP record file. Trying to create new one with zero record.");
+        WriteLog("Failed to open IP record file. Trying to create new one with zero record.", true); // WARNING
 
         ofstream out;
         out.open(*path);
 
         if (out.fail()) {
-            WriteLog("Failed to create ip record. Cannot continue.");
+            WriteLog("Failed to create ip record. Cannot continue.", true);
             delete path;
             WRITE_EXIT;
             throw new exception;
@@ -352,7 +370,7 @@ const updater::ip *ReadIpFromFile(const string * const path)
         string msg = "";
         msg.append("Error while parsing last ip from file: ");
         msg.append(e.what());
-        WriteLog(msg);
+        WriteLog(msg, true);
         WRITE_EXIT;
         throw;
     }
@@ -388,7 +406,7 @@ void UpdateIp(const updater::ip * const ip, const string &url, const string &api
 
     if (resp.length() > 10)
     {
-        WriteLog("Error in update: " + resp);
+        WriteLog("Error in update: " + resp, true);
         delete ip;
         WRITE_EXIT;
         throw new exception;
@@ -399,7 +417,7 @@ const updater::ip *QueryIpFromUrl(const string &url, const bool &clean_result)
 {
     if (!clean_result)
     {
-        WriteLog("Unclean ip fetching not yet implemented. Please use clean source for fetching ip address.");
+        WriteLog("Unclean ip fetching not yet implemented. Please use clean source for fetching ip address.", true);
         WRITE_EXIT;
         throw new exception;
     }
@@ -428,7 +446,7 @@ const updater::ip *QueryIpFromUrl(const string &url, const bool &clean_result)
         string msg = "";
         msg.append("Error while parsing current remote ip: ");
         msg.append(e.what());
-        WriteLog(msg);
+        WriteLog(msg, true);
         WRITE_EXIT;
         throw;
     }
@@ -442,7 +460,7 @@ void SaveIpToFile(const updater::ip * const ip, const string * const path)
     file.open(*path, ios::out);
 
     if (file.fail()) {
-        WriteLog("Failed to open ip record file. Ensure necessary resources are available for operation.");
+        WriteLog("Failed to open ip record file. Ensure necessary resources and permissions are available for operation.", true);
         delete path;
         WRITE_EXIT;
         throw new exception;

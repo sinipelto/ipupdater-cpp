@@ -47,7 +47,8 @@ HEADERS += \
     utilspp/ThreadingSingle.hpp \
     utilspp/TypeList.hpp \
     utilspp/TypeTrait.hpp \
-    ip.h
+    utils.hh \
+    ip.hh
 
 SOURCES += \
     internal/CurlHandle.cpp \
@@ -63,4 +64,5 @@ SOURCES += \
     main.cpp \
     Multi.cpp \
     OptionBase.cpp \
-    Options.cpp
+    Options.cpp \
+    utils.cpp
