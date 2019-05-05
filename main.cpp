@@ -35,7 +35,7 @@ std::pair<string, string> ParseLine(const string &line);
 bool ParseBool(const string &input);
 vector<string> ParseList(string input, const string &delimiter);
 
-void WriteLog(const string &message, const bool &is_error=false);
+void WriteLog(const string &message, const bool &use_cerr=false);
 
 int Terminate(const int &code);
 
@@ -54,7 +54,7 @@ int main(int argc, char **argv)
 {
     if (argc <= 0)
     {
-        WriteLog("Error: No path argument given. Aborting.", true);
+        WriteLog("ERROR: No path argument given. Aborting.", true);
         return Terminate(1);
     }
 
@@ -74,7 +74,7 @@ int main(int argc, char **argv)
         config = ReadConfiguration(configPath);
     } catch (const exception& e) {
         string msg = "";
-        msg.append("Failed to read configuration: ");
+        msg.append("ERROR: Failed to read configuration: ");
         msg.append(e.what());
         WriteLog(msg, true);
         WRITE_EXIT;
@@ -139,8 +139,9 @@ int main(int argc, char **argv)
         delete remote_ip;
         delete lastIpPath;
 
-        WriteLog("No records to process. Exiting..");
+        WriteLog("WARNING: No records to process. Exiting.", true);
 
+        // Is a warning so terminate normally, status 0
         return Terminate(0);
     }
 
@@ -201,7 +202,7 @@ bool ParseBool(const string &input)
 
     if (parsed == "")
     {
-        WriteLog("Error: Could not parse boolean value for: " + input + "in configuration.", true);
+        WriteLog("ERROR: Could not parse boolean value for: " + input + "in configuration.", true);
         throw new exception;
     }
 
@@ -212,12 +213,13 @@ bool ParseBool(const string &input)
 
 vector<string> ParseList(string input, const string &delimiter)
 {
-    std::vector<string> options = {};
+    vector<string> options = {};
 
     size_t pos = 0;
+
     while ((pos = input.find(delimiter)) != std::string::npos)
     {
-        std::string token = input.substr(0, pos);
+        string token = input.substr(0, pos);
         input.erase(0, pos + delimiter.length());
 
         if (token == "") continue;
@@ -237,16 +239,16 @@ int Terminate(const int &code)
     return code;
 }
 
-void WriteLog(const string &message, const bool &is_error)
+void WriteLog(const string &message, const bool &use_cerr)
 {
     // Set time parse format string
     const char *fileFormat = "%Y-%m-%d";
     const char *stampFormat = "[%Y-%m-%d %H:%M:%S] ";
 
     // Get current time
-    std::time_t now = std::time(nullptr);
+    time_t now = time(nullptr);
 
-    std::ostringstream ostring;
+    ostringstream ostring;
 
     ostring << std::put_time(std::localtime(&now), fileFormat);
 
@@ -262,32 +264,33 @@ void WriteLog(const string &message, const bool &is_error)
 
     if (logFile.fail())
     {
-        cerr << "Failed to open log file. Trying to create new one." << endl;
+        // Using cout insted of cerr because new file is created nightly
+        cout << "WARNING: Failed to open log file. Trying to create new one.." << endl;
         logFile.open(logFileName);
 
         if (logFile.fail())
         {
-            cerr << "Failed to create log file, aborting.." << endl;
+            cerr << "ERROR: Failed to create log file, aborting." << endl;
             throw new exception;
         }
     }
 
-    ostring << std::put_time(std::localtime(&now), stampFormat) << message;
+    ostring << put_time(localtime(&now), stampFormat) << message;
 
     logFile << ostring.str() << endl;
 
-    if (is_error) {
-        cerr << std::put_time(std::localtime(&now), stampFormat) << message << endl;
+    if (use_cerr) {
+        cerr << put_time(localtime(&now), stampFormat) << message << endl;
         return;
     }
 
-    cout << std::put_time(std::localtime(&now), stampFormat) << message << endl;
+    cout << put_time(localtime(&now), stampFormat) << message << endl;
 }
 
 
 std::pair<string, string> ParseLine(const string &line)
 {
-    std::pair<string, string> keyvalue;
+    pair<string, string> keyvalue;
 
     for (unsigned i = 0; i < line.size(); i++)
     {
@@ -311,7 +314,7 @@ map<string, string> *ReadConfiguration(const string * const path)
 
     if (file.fail())
     {
-        WriteLog("Could not open configuration file (updater.conf).", true);
+        WriteLog("ERROR: Could not open configuration file (updater.conf).", true);
         delete path;
         WRITE_EXIT;
         throw new exception;
@@ -339,13 +342,13 @@ const updater::ip *ReadIpFromFile(const string * const path)
 
     if (file.fail())
     {
-        WriteLog("Failed to open IP record file. Trying to create new one with zero record.", true); // WARNING
+        WriteLog("WARNING: Failed to open IP record file. Trying to create new one with zero record..", true);
 
         ofstream out;
         out.open(*path);
 
         if (out.fail()) {
-            WriteLog("Failed to create ip record. Cannot continue.", true);
+            WriteLog("ERROR: Failed to create ip record. Cannot continue.", true);
             delete path;
             WRITE_EXIT;
             throw new exception;
@@ -366,9 +369,9 @@ const updater::ip *ReadIpFromFile(const string * const path)
 
     try {
         addr = new updater::ip(line);
-    } catch (const std::exception &e) {
+    } catch (const exception &e) {
         string msg = "";
-        msg.append("Error while parsing last ip from file: ");
+        msg.append("ERROR: Error while parsing last ip from file: ");
         msg.append(e.what());
         WriteLog(msg, true);
         WRITE_EXIT;
@@ -417,7 +420,7 @@ const updater::ip *QueryIpFromUrl(const string &url, const bool &clean_result)
 {
     if (!clean_result)
     {
-        WriteLog("Unclean ip fetching not yet implemented. Please use clean source for fetching ip address.", true);
+        WriteLog("ERROR: Unclean ip fetching not yet implemented. Please use clean source for fetching ip address. Set use_router to false.", true);
         WRITE_EXIT;
         throw new exception;
     }
@@ -444,7 +447,7 @@ const updater::ip *QueryIpFromUrl(const string &url, const bool &clean_result)
         addr = new updater::ip(resp);
     } catch (const std::exception &e) {
         string msg = "";
-        msg.append("Error while parsing current remote ip: ");
+        msg.append("ERROR: Error while parsing current remote ip: ");
         msg.append(e.what());
         WriteLog(msg, true);
         WRITE_EXIT;
@@ -460,7 +463,7 @@ void SaveIpToFile(const updater::ip * const ip, const string * const path)
     file.open(*path, ios::out);
 
     if (file.fail()) {
-        WriteLog("Failed to open ip record file. Ensure necessary resources and permissions are available for operation.", true);
+        WriteLog("ERROR: Failed to open ip record file. Ensure necessary resources and permissions are available for operation.", true);
         delete path;
         WRITE_EXIT;
         throw new exception;

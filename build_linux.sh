@@ -1,4 +1,13 @@
-g++ -lcurl -Ofast cURLpp.cpp Easy.cpp Exception.cpp Form.cpp Info.cpp ip.cpp main.cpp Multi.cpp OptionBase.cpp Options.cpp internal/CurlHandle.cpp internal/OptionList.cpp internal/OptionSetter.cpp internal/SList.cpp  -o updater -I .
+#!bin/sh
+
+# Ensure bin/ exists
 mkdir bin
-cp -R skeleton/* ./bin/
-mv updater ./bin/
+
+# Clean bin/ of any old stuff
+rm -r bin/*
+
+# Copy stuff from skeleton for the program
+cp -R skeleton/* bin/
+
+# Compile the program with optimization using g++
+g++ -lcurl -o bin/updater -I . -Ofast *.cpp internal/*.cpp
