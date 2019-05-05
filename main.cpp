@@ -39,7 +39,8 @@ void WriteLog(const string &message, const bool &use_cerr=false);
 
 int Terminate(const int &code);
 
-#define WRITE_EXIT WriteLog("----------------------------------------------------------------")
+// Separating line for logging
+#define WRITE_EXIT WriteLog("---------------------------------------------------------")
 
 #if __WIN32
 const char DELIM = '\\';
