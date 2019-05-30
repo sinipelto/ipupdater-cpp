@@ -35,6 +35,7 @@ std::pair<string, string> ParseLine(const string &line);
 bool ParseBool(const string &input);
 vector<string> ParseList(string input, const string &delimiter);
 
+void WriteChangeLog(const string * const path, const updater::ip *oldIp, const updater::ip *newIp);
 void WriteLog(const string &message, const bool &use_cerr=false);
 
 int Terminate(const int &code);
@@ -65,11 +66,11 @@ int main(int argc, char **argv)
 #else
     basePath = ProcessPath(basePath);
 #endif
-    const string * const configPath = new string(basePath + "updater.conf");
-    const string * const lastIpPath = new string(basePath + "lastip");
     LogPath = basePath + LogPath;
 
     map<string, string> *config;
+
+    const string * const configPath = new string(basePath + "updater.conf");
 
     try {
         config = ReadConfiguration(configPath);
@@ -103,6 +104,7 @@ int main(int argc, char **argv)
     delete config;
 
     // Load last ip from record file
+    const string * const lastIpPath = new string(basePath + "lastip");
     const updater::ip *local_ip = ReadIpFromFile(lastIpPath);
 
     // Query current ip
@@ -132,6 +134,11 @@ int main(int argc, char **argv)
     WriteLog("IP address changed from last record, updating the new ip..");
     WriteLog("Old IP: " + local_ip->toString());
     WriteLog("New IP: " + remote_ip->toString());
+
+    // Write the record change to a special record log file
+    const string * const recordPath = new string(basePath + "record.log");
+    WriteChangeLog(recordPath, local_ip, remote_ip);
+    delete recordPath;
 
     delete local_ip;
 
@@ -279,6 +286,7 @@ void WriteLog(const string &message, const bool &use_cerr)
     ostring << put_time(localtime(&now), stampFormat) << message;
 
     logFile << ostring.str() << endl;
+    logFile.close();
 
     if (use_cerr) {
         cerr << put_time(localtime(&now), stampFormat) << message << endl;
@@ -286,6 +294,37 @@ void WriteLog(const string &message, const bool &use_cerr)
     }
 
     cout << put_time(localtime(&now), stampFormat) << message << endl;
+}
+
+void WriteChangeLog(const string * const path, const updater::ip *oldIp, const updater::ip *newIp)
+{
+    // Set time parse format string
+    const char *stampFormat = "[%Y-%m-%d %H:%M:%S] ";
+
+    // Get current time
+    time_t now = time(nullptr);
+
+    ostringstream ostring;
+
+    ofstream logFile;
+    logFile.open(*path, ios::app);
+
+    if (logFile.fail())
+    {
+        WriteLog("WARNING: Failed to open record file. Trying to create new one..", true);
+        logFile.open(*path);
+
+        if (logFile.fail())
+        {
+            WriteLog("ERROR: Failed to create record file, aborting..", true);
+            throw new exception;
+        }
+    }
+
+    ostring << put_time(localtime(&now), stampFormat) << "IP Record changed: from " << oldIp->toString() << " to " << newIp->toString();
+
+    logFile << ostring.str() << endl;
+    logFile.close();
 }
 
 
