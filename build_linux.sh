@@ -10,4 +10,4 @@ rm -r bin/*
 cp -R skeleton/* bin/
 
 # Compile the program with optimization using g++
-g++ -lcurl -o bin/updater -I . -Ofast *.cpp internal/*.cpp
+g++ -v -Wall -lcurl -o bin/updater -I . -Ofast *.cpp internal/*.cpp

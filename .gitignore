@@ -32,3 +32,8 @@ target_wrapper.*
 
 # QtCreator CMake
 CMakeLists.txt.user*
+
+# Compiled binary files and usage files
+bin/record.log
+bin/logs/*
+bin/lastip
