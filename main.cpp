@@ -55,6 +55,7 @@ static string LogPath = "logs/";
 
 const string configFile = "updater.conf";
 const string lastipFile = "lastip";
+const string recordFile = "record.log";
 
 int main(int argc, char **argv)
 {
@@ -89,6 +90,7 @@ int main(int argc, char **argv)
 
     delete configPath;
 
+    // Read variables from configuration
     const string domain = config->at("domain");
     const string api_key = config->at("api_key");
     const string api_secret = config->at("api_secret");
@@ -106,6 +108,15 @@ int main(int argc, char **argv)
 
     // Free configuration map memory
     delete config;
+
+    // Check that there are domain records to process
+    if (record_list.size() <= 0)
+    {
+        WriteLog("WARNING: No records to process. Exiting.", true);
+
+        // Is a warning so terminate normally, status 0
+        return Terminate(0);
+    }
 
     // Load last ip from record file
     const string * const lastIpPath = new string(basePath + lastipFile);
@@ -140,22 +151,11 @@ int main(int argc, char **argv)
     WriteLog("New IP: " + remote_ip->toString());
 
     // Write the record change to a special record log file
-    const string * const recordPath = new string(basePath + "record.log");
+    const string * const recordPath = new string(basePath + recordFile);
     WriteChangeLog(recordPath, local_ip, remote_ip);
     delete recordPath;
 
     delete local_ip;
-
-    if (record_list.size() <= 0)
-    {
-        delete remote_ip;
-        delete lastIpPath;
-
-        WriteLog("WARNING: No records to process. Exiting.", true);
-
-        // Is a warning so terminate normally, status 0
-        return Terminate(0);
-    }
 
     for (const string& type : record_list)
     {
@@ -478,7 +478,7 @@ const updater::ip *QueryIpFromUrl(const string &url, const IpSource &source)
     {
         WriteLog("ERROR: Router ip fetching not yet implemented. Please use clean source for fetching ip address. Set use_router to false.", true);
         WRITE_EXIT;
-        Terminate(1);
+        throw new exception;
     }
 
     curlpp::Easy handle;
