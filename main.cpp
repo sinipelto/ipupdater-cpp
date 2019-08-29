@@ -21,12 +21,14 @@
 
 using namespace std;
 
+enum IpSource {external, router};
+
 string &ProcessPath(string &path);
 
 map<string, string> *ReadConfiguration(const string * const path);
 
 const updater::ip *ReadIpFromFile(const string * const path);
-const updater::ip *QueryIpFromUrl(const string &url, const bool &clean_result);
+const updater::ip *QueryIpFromUrl(const string &url, const IpSource &source);
 
 void UpdateIp(const updater::ip * const ip, const string &url, const string &apikey, const string &apisecret);
 void SaveIpToFile(const updater::ip * const ip, const string * const path);
@@ -51,6 +53,9 @@ const char DELIM = '/';
 static string LogPath = "logs/";
 #endif
 
+const string configFile = "updater.conf";
+const string lastipFile = "lastip";
+const string recordFile = "record.log";
 
 int main(int argc, char **argv)
 {
@@ -70,7 +75,7 @@ int main(int argc, char **argv)
 
     map<string, string> *config;
 
-    const string * const configPath = new string(basePath + "updater.conf");
+    const string * const configPath = new string(basePath + configFile);
 
     try {
         config = ReadConfiguration(configPath);
@@ -85,6 +90,7 @@ int main(int argc, char **argv)
 
     delete configPath;
 
+    // Read variables from configuration
     const string domain = config->at("domain");
     const string api_key = config->at("api_key");
     const string api_secret = config->at("api_secret");
@@ -103,21 +109,30 @@ int main(int argc, char **argv)
     // Free configuration map memory
     delete config;
 
+    // Check that there are domain records to process
+    if (record_list.size() <= 0)
+    {
+        WriteLog("WARNING: No records to process. Exiting.", true);
+
+        // Is a warning so terminate normally, status 0
+        return Terminate(0);
+    }
+
     // Load last ip from record file
-    const string * const lastIpPath = new string(basePath + "lastip");
+    const string * const lastIpPath = new string(basePath + lastipFile);
     const updater::ip *local_ip = ReadIpFromFile(lastIpPath);
 
     // Query current ip
     const updater::ip *remote_ip;
 
-    if (use_router_info)
+    if (!use_router_info)
     {
-        WriteLog("Using local router as external ip source..");
-        remote_ip = QueryIpFromUrl(router_url, false);
+        WriteLog("Using external service for fetching ip address..");
+        remote_ip = QueryIpFromUrl(ip_url, IpSource::external);
     }
     else {
-        WriteLog("Using external service for fetching ip address..");
-        remote_ip = QueryIpFromUrl(ip_url, true);
+        WriteLog("Using local router as external ip source..");
+        remote_ip = QueryIpFromUrl(router_url, IpSource::router);
     }
 
     // Compare IPs
@@ -136,22 +151,11 @@ int main(int argc, char **argv)
     WriteLog("New IP: " + remote_ip->toString());
 
     // Write the record change to a special record log file
-    const string * const recordPath = new string(basePath + "record.log");
+    const string * const recordPath = new string(basePath + recordFile);
     WriteChangeLog(recordPath, local_ip, remote_ip);
     delete recordPath;
 
     delete local_ip;
-
-    if (record_list.size() <= 0)
-    {
-        delete remote_ip;
-        delete lastIpPath;
-
-        WriteLog("WARNING: No records to process. Exiting.", true);
-
-        // Is a warning so terminate normally, status 0
-        return Terminate(0);
-    }
 
     for (const string& type : record_list)
     {
@@ -338,7 +342,7 @@ std::pair<string, string> ParseLine(const string &line)
         {
             keyvalue.first = line.substr(0, i); // [sdfjsd=], = excluded
             keyvalue.second = line.substr(i+1, line.size()-1); // [sdfsahdds\n], \n excluded
-            break; // Only first = is parsed
+            break; // Only first '=' is parsed
         }
     }
 
@@ -354,7 +358,7 @@ map<string, string> *ReadConfiguration(const string * const path)
 
     if (file.fail())
     {
-        WriteLog("ERROR: Could not open configuration file (updater.conf).", true);
+        WriteLog("ERROR: Could not open configuration file: " + configFile, true);
         delete path;
         WRITE_EXIT;
         throw new exception;
@@ -364,7 +368,7 @@ map<string, string> *ReadConfiguration(const string * const path)
     while (getline(file, line))
     {
         if (line[0] == '#') continue;
-        else if (line.size() < 3) continue; // Format: a=b is minimum of 3
+        else if (line.size() < 3) continue; // Format: 'a=b' is minimum of 3
 
         auto parsed = ParseLine(line);
         settings->operator[](parsed.first) = parsed.second;
@@ -437,16 +441,28 @@ void UpdateIp(const updater::ip * const ip, const string &url, const string &api
     handle.setOpt(curlpp::Options::SslVerifyHost(false));
     handle.setOpt(curlpp::Options::SslVerifyPeer(false));
     handle.setOpt(curlpp::Options::WriteStream(&buffer));
+    handle.setOpt(curlpp::Options::FailOnError(true));
 
-    handle.perform();
+    try {
+        handle.perform();
+    } catch (curlpp::RuntimeError &e) {
+        string msg = "";
+        msg.append("Error while sending update request: ");
+        msg.append(e.what());
+        WriteLog(msg, true);
+        WRITE_EXIT;
+        throw;
+    }
 
     string resp;
     string strBuf;
 
+    // Reading response from buffer
     while (buffer >> strBuf) {
         resp += strBuf + " ";
     }
 
+    // Long response indicates a problem
     if (resp.length() > 10)
     {
         WriteLog("Error in update: " + resp, true);
@@ -456,11 +472,11 @@ void UpdateIp(const updater::ip * const ip, const string &url, const string &api
     }
 }
 
-const updater::ip *QueryIpFromUrl(const string &url, const bool &clean_result)
+const updater::ip *QueryIpFromUrl(const string &url, const IpSource &source)
 {
-    if (!clean_result)
+    if (source == IpSource::router)
     {
-        WriteLog("ERROR: Unclean ip fetching not yet implemented. Please use clean source for fetching ip address. Set use_router to false.", true);
+        WriteLog("ERROR: Router ip fetching not yet implemented. Please use clean source for fetching ip address. Set use_router to false.", true);
         WRITE_EXIT;
         throw new exception;
     }
@@ -474,8 +490,18 @@ const updater::ip *QueryIpFromUrl(const string &url, const bool &clean_result)
     handle.setOpt(curlpp::Options::SslVerifyHost(false));
     handle.setOpt(curlpp::Options::SslVerifyPeer(false));
     handle.setOpt(curlpp::Options::WriteStream(&buffer));
+    handle.setOpt(curlpp::Options::FailOnError(true));
 
-    handle.perform();
+    try {
+        handle.perform();
+    } catch (curlpp::RuntimeError &e) {
+        string msg = "";
+        msg.append("Error while sending ip get request: ");
+        msg.append(e.what());
+        WriteLog(msg, true);
+        WRITE_EXIT;
+        throw;
+    }
 
     string resp;
 
