@@ -34,8 +34,9 @@ void UpdateIp(const updater::ip * const ip, const string &url, const string &api
 void SaveIpToFile(const updater::ip * const ip, const string * const path);
 
 std::pair<string, string> ParseLine(const string &line);
+void RemoveSpaces(string &input);
 bool ParseBool(const string &input);
-vector<string> ParseList(string input, const string &delimiter);
+std::vector<string> ParseList(string input, const string &delimiter);
 
 void WriteChangeLog(const string * const path, const updater::ip *oldIp, const updater::ip *newIp);
 void WriteLog(const string &message, const bool &use_cerr=false);
@@ -336,12 +337,21 @@ std::pair<string, string> ParseLine(const string &line)
 {
     pair<string, string> keyvalue;
 
+    // line -> key=value
     for (unsigned i = 0; i < line.size(); i++)
     {
         if (line[i] == '=')
         {
             keyvalue.first = line.substr(0, i); // [sdfjsd=], = excluded
-            keyvalue.second = line.substr(i+1, line.size()-1); // [sdfsahdds\n], \n excluded
+
+            if ( line[ line.size() - 1 ] == '\n' ) {
+                keyvalue.second = line.substr(i+1, line.size()-1); // [sdfsahdds\n], \n excluded
+            }
+
+            else {
+                keyvalue.second = line.substr(i+1, line.size()); // [sdfsahdds]
+            }
+
             break; // Only first '=' is parsed
         }
     }
@@ -370,6 +380,7 @@ map<string, string> *ReadConfiguration(const string * const path)
         if (line[0] == '#') continue;
         else if (line.size() < 3) continue; // Format: 'a=b' is minimum of 3
 
+        RemoveSpaces(line); // Remove any whitespace from the config line
         auto parsed = ParseLine(line);
         settings->operator[](parsed.first) = parsed.second;
     }
@@ -537,4 +548,20 @@ void SaveIpToFile(const updater::ip * const ip, const string * const path)
 
     file << ip->toString();
     file.close();
+}
+
+void RemoveSpaces(string &input)
+{
+    if (input == "") return;
+
+    auto it = input.begin();
+
+    while (it != input.end())
+    {
+        if (*it == ' ' || *it == '\t' || *it == '\n' || *it == '\r') {
+            input.erase(it);
+        }
+
+        it++;
+    }
 }
