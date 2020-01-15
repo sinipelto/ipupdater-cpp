@@ -1,4 +1,4 @@
-#!bin/sh
+#!/bin/sh
 
 # Ensure bin/ exists
 mkdir bin
@@ -10,4 +10,4 @@ rm -r bin/*
 cp -R skeleton/* bin/
 
 # Compile the program with optimization using g++
-g++ -v -Wall -lcurl -o bin/updater -I . -Ofast *.cpp internal/*.cpp
+g++ -Wall -lcurl -o bin/updater -I . -Ofast $(find . -iname "*.cpp")
