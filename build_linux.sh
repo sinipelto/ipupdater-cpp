@@ -10,4 +10,4 @@ rm -r bin/*
 cp -R skeleton/* bin/
 
 # Compile the program with optimization using g++
-g++ -Wall -lcurl -o bin/updater -I . -Ofast $(find . -iname "*.cpp")
+g++ -Wall -o bin/updater -I . -Ofast $(find . -iname "*.cpp") -lcurl
