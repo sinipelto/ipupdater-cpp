@@ -1,0 +1,32 @@
+{
+	"file": "main.cpp",
+	"compiler": "/usr/bin/g++",
+	"libs": "libcurl.a",
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cppbuild",
+			"label": "build-debug",
+			"command": "${compiler}",
+			"args": [
+				"-fdiagnostics-color=always",
+				"-Wall",
+				"-Wextra",
+				"-Wpedantic",
+				"-g",
+				"-o",
+				"${workspaceFolder}/bin/updater",
+				"${file}",
+				"${libs}"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build",
+			"detail": "compiler: /usr/bin/cpp"
+		}
+	]
+}

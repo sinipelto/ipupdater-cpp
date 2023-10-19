@@ -25,38 +25,43 @@ using StrMap = map<string, string>;
 using StrPair = pair<string, string>;
 using StrVec = vector<string>;
 
-enum IpSource { external, router };
+enum IpSource
+{
+    external,
+    router
+};
 
 string &ProcessPath(string &path);
 
 StrMap *ReadConfiguration(const string &path);
 
 const updater::ip *ReadIpFromFile(const string &path);
-const updater::ip *QueryIpFromUrl(const string &url, const IpSource &source);
+const updater::ip *QueryIpFromRemote(const string &url, const IpSource &source);
 
-void UpdateIp(const updater::ip * const ip, const string &url, const string &apikey, const string &apisecret);
-void SaveIpToFile(const updater::ip * const ip, const string &path);
+void UpdateIp(const updater::ip *const ip, const string &url, const string &apikey, const string &apisecret);
+void SaveIpToFile(const updater::ip *const ip, const string &path);
 
+bool IsWhitespace(char);
+void RemoveWhitespace(string &input);
 StrPair ParseLine(const string &line);
-void RemoveSpaces(string &input);
 bool ParseBool(const string &input);
-StrVec ParseList(string input, const string &delimiter);
+StrVec ParseList(string &input, const string &delimiter);
 
-void WriteChangeLog(const string &path, const updater::ip * const oldIp, const updater::ip * const newIp);
-void WriteLog(const string &message, const bool &use_cerr=false);
+void WriteChangeLog(const string &path, const updater::ip *const oldIp, const updater::ip *const newIp);
+void WriteLog(const string &message, const bool &write_cerr = false);
 
-const int &Terminate(const int &code) const;
+const int &Terminate(const int &code);
 
 // Separating line for logging
 #define WRITE_EXIT WriteLog("---------------------------------------------------------")
 
 #if __WIN32
 const char DELIM = '\\';
-static string LogPath = "logs\\";
 #else
 const char DELIM = '/';
-static string LogPath = "logs/";
 #endif
+
+static string LogPath = string("logs") + DELIM;
 
 const string configFile = "updater.conf";
 const string lastipFile = "lastip";
@@ -71,20 +76,27 @@ int main(int argc, char **argv)
     }
 
     string basePath = argv[0];
+
+    // will be "/path/to/cwd/"
+    // will be "DRIVE:\\path\\to\\cwd\\"
 #if __WIN32
     basePath = ProcessPath(ProcessPath(basePath));
 #else
     basePath = ProcessPath(basePath);
 #endif
+
     LogPath = basePath + LogPath;
 
     const string configPath = basePath + configFile;
 
     StrMap *config;
 
-    try {
+    try
+    {
         config = ReadConfiguration(configPath);
-    } catch (const exception& e) {
+    }
+    catch (const exception &e)
+    {
         string msg = "";
         msg.append("ERROR: Failed to read configuration: ");
         msg.append(e.what());
@@ -95,14 +107,12 @@ int main(int argc, char **argv)
 
     // Read variables from configuration
     const string domain = config->at("domain");
+    const string api_url_base = config->at("api_url");
     const string api_key = config->at("api_key");
     const string api_secret = config->at("api_secret");
-
     StrVec record_list = ParseList(config->at("record_list"), ",");
 
     const string ip_url = config->at("ip_url");
-    const string api_url_base = config->at("api_url");
-
     const bool use_router_info = ParseBool(config->at("use_router_info"));
     const string router_url = config->at("router_url");
     const string router_username = config->at("router_username");
@@ -117,8 +127,9 @@ int main(int argc, char **argv)
     {
         WriteLog("WARNING: No records to process. Exiting.", true);
 
-        // Is a warning so terminate normally, status 0
-        return Terminate(0);
+        // Abnormal to run updater if no records to process.
+        // Return error to force checking config
+        return Terminate(1);
     }
 
     // Load last ip from record file
@@ -131,18 +142,19 @@ int main(int argc, char **argv)
     if (!use_router_info)
     {
         WriteLog("Using external service for fetching ip address..");
-        remote_ip = QueryIpFromUrl(ip_url, IpSource::external);
+        remote_ip = QueryIpFromRemote(ip_url, IpSource::external);
     }
-    else {
-        WriteLog("Using local router as external ip source..");
-        remote_ip = QueryIpFromUrl(router_url, IpSource::router);
+    else
+    {
+        WriteLog("Using (local gateway) router as external ip source..");
+        remote_ip = QueryIpFromRemote(router_url, IpSource::router);
     }
 
     // Compare IPs
-    if (*local_ip == *remote_ip) {
+    if (*local_ip == *remote_ip)
+    {
         WriteLog("IP not changed, exiting without changes.");
 
-        delete lastIpPath;
         delete local_ip;
         delete remote_ip;
 
@@ -154,13 +166,12 @@ int main(int argc, char **argv)
     WriteLog("New IP: " + remote_ip->toString());
 
     // Write the record change to a special record log file
-    const string * const recordPath = new string(basePath + recordFile);
+    const string recordPath = basePath + recordFile;
     WriteChangeLog(recordPath, local_ip, remote_ip);
-    delete recordPath;
 
     delete local_ip;
 
-    for (const string& type : record_list)
+    for (const string &type : record_list)
     {
         // Create api url
         const string &api_url = api_url_base + "/" + domain + "/records/A/" + type;
@@ -177,7 +188,6 @@ int main(int argc, char **argv)
     SaveIpToFile(remote_ip, lastIpPath);
 
     delete remote_ip;
-    delete lastIpPath;
 
     WriteLog("Local IP record updated successfully.");
 
@@ -189,7 +199,7 @@ string &ProcessPath(string &path)
 {
     auto it = path.rbegin();
 
-    // Remove the first slash
+    // Remove the first slash if exists
     if (*it == DELIM)
     {
         path.pop_back();
@@ -210,51 +220,53 @@ bool ParseBool(const string &input)
 {
     string parsed = "";
 
-    for (char c : input) {
-        if (c == ' ' || c == '\n' || c == '\t' || c == '\r') continue;
-        parsed += std::tolower(c);
+    for (char c : input)
+    {
+        if (IsWhitespace(c))
+            continue;
+        parsed += tolower(c);
     }
 
-    if (parsed == "")
+    if (parsed != "yes" && parsed != "y" && parsed != "true")
     {
-        WriteLog("ERROR: Could not parse boolean value for: " + input + "in configuration.", true);
+        WriteLog("ERROR: Could not parse boolean value for input: " + input + " in the configuration.", true);
         throw new exception;
     }
 
-    if (parsed == "yes" || parsed == "y" || parsed == "true") return true;
-
-    return false;
+    return true;
 }
 
-StrVec ParseList(string input, const string &delimiter)
+StrVec ParseList(string &input, const string &delimiter)
 {
     StrVec options = {};
 
     size_t pos = 0;
 
-    while ((pos = input.find(delimiter)) != std::string::npos)
+    while ((pos = input.find(delimiter)) != string::npos)
     {
         string token = input.substr(0, pos);
         input.erase(0, pos + delimiter.length());
 
-        if (token == "") continue;
+        if (token == "")
+            continue;
 
         options.push_back(token);
     }
 
-    if (input != "") options.push_back(input);
+    if (input != "")
+        options.push_back(input);
 
     return options;
 }
 
-const int &Terminate(const int &code) const
+const int &Terminate(const int &code)
 {
     curlpp::terminate();
     WRITE_EXIT;
     return code;
 }
 
-void WriteLog(const string &message, const bool &use_cerr)
+void WriteLog(const string &message, const bool &write_cerr)
 {
     // Set time parse format string
     const char *fileFormat = "%Y-%m-%d";
@@ -265,7 +277,7 @@ void WriteLog(const string &message, const bool &use_cerr)
 
     ostringstream ostring;
 
-    ostring << std::put_time(std::localtime(&now), fileFormat);
+    ostring << put_time(localtime(&now), fileFormat);
 
     string logFileName;
     logFileName.append(LogPath);
@@ -295,7 +307,8 @@ void WriteLog(const string &message, const bool &use_cerr)
     logFile << ostring.str() << endl;
     logFile.close();
 
-    if (use_cerr) {
+    if (write_cerr)
+    {
         cerr << put_time(localtime(&now), stampFormat) << message << endl;
         return;
     }
@@ -303,7 +316,7 @@ void WriteLog(const string &message, const bool &use_cerr)
     cout << put_time(localtime(&now), stampFormat) << message << endl;
 }
 
-void WriteChangeLog(const string &path, const updater::ip * const oldIp, const updater::ip * const newIp)
+void WriteChangeLog(const string &path, const updater::ip *const oldIp, const updater::ip *const newIp)
 {
     // Set time parse format string
     const char *stampFormat = "[%Y-%m-%d %H:%M:%S] ";
@@ -334,7 +347,6 @@ void WriteChangeLog(const string &path, const updater::ip * const oldIp, const u
     logFile.close();
 }
 
-
 StrPair ParseLine(const string &line)
 {
     pair<string, string> keyvalue;
@@ -346,12 +358,14 @@ StrPair ParseLine(const string &line)
         {
             keyvalue.first = line.substr(0, i); // [sdfjsd=], = excluded
 
-            if ( line[ line.size() - 1 ] == '\n' ) {
-                keyvalue.second = line.substr(i+1, line.size()-1); // [sdfsahdds\n], \n excluded
+            if (line[line.size() - 1] == '\n')
+            {
+                keyvalue.second = line.substr(i + 1, line.size() - 1); // [sdfsahdds\n], \n excluded
             }
 
-            else {
-                keyvalue.second = line.substr(i+1, line.size()); // [sdfsahdds]
+            else
+            {
+                keyvalue.second = line.substr(i + 1, line.size()); // [sdfsahdds]
             }
 
             break; // Only first '=' is parsed
@@ -361,9 +375,9 @@ StrPair ParseLine(const string &line)
     return keyvalue;
 }
 
-StrMap &ReadConfiguration(const string &path)
+StrMap *ReadConfiguration(const string &path)
 {
-    StrMap settings = StrMap();
+    StrMap *settings = new StrMap();
 
     ifstream file;
     file.open(path);
@@ -371,7 +385,6 @@ StrMap &ReadConfiguration(const string &path)
     if (file.fail())
     {
         WriteLog("ERROR: Could not open configuration file: " + configFile, true);
-        delete path;
         WRITE_EXIT;
         throw new exception;
     }
@@ -379,10 +392,13 @@ StrMap &ReadConfiguration(const string &path)
     string line;
     while (getline(file, line))
     {
-        if (line[0] == '#') continue;
-        else if (line.size() < 3) continue; // Format: 'a=b' is minimum of 3
+        RemoveWhitespace(line); // Remove any whitespace from the config line
 
-        RemoveSpaces(line); // Remove any whitespace from the config line
+        if (line[0] == '#')
+            continue;
+        else if (line.size() < 3)
+            continue; // Format: 'a=b' is minimum of 3
+
         auto parsed = ParseLine(line);
         settings->operator[](parsed.first) = parsed.second;
     }
@@ -404,9 +420,9 @@ const updater::ip *ReadIpFromFile(const string &path)
         ofstream out;
         out.open(path);
 
-        if (out.fail()) {
+        if (out.fail())
+        {
             WriteLog("ERROR: Failed to create ip record. Cannot continue.", true);
-            delete path;
             WRITE_EXIT;
             throw new exception;
         }
@@ -424,9 +440,12 @@ const updater::ip *ReadIpFromFile(const string &path)
 
     updater::ip *addr;
 
-    try {
+    try
+    {
         addr = new updater::ip(line);
-    } catch (const exception &e) {
+    }
+    catch (const exception &e)
+    {
         string msg = "";
         msg.append("ERROR: Error while parsing last ip from file: ");
         msg.append(e.what());
@@ -438,11 +457,11 @@ const updater::ip *ReadIpFromFile(const string &path)
     return addr;
 }
 
-void UpdateIp(const updater::ip * const ip, const string &url, const string &apikey, const string &apisecret)
+void UpdateIp(const updater::ip *const ip, const string &url, const string &apikey, const string &apisecret)
 {
     curlpp::Easy handle;
 
-    std::stringstream buffer;
+    stringstream buffer;
 
     auto authOpt = curlpp::options::HttpHeader({"Content-Type: application/json", "Authorization: sso-key " + apikey + ":" + apisecret});
     auto dataOpt = curlpp::Options::PostFields("[{\"data\":\"" + ip->toString() + "\"}]");
@@ -456,9 +475,12 @@ void UpdateIp(const updater::ip * const ip, const string &url, const string &api
     handle.setOpt(curlpp::Options::WriteStream(&buffer));
     handle.setOpt(curlpp::Options::FailOnError(true));
 
-    try {
+    try
+    {
         handle.perform();
-    } catch (curlpp::RuntimeError &e) {
+    }
+    catch (curlpp::RuntimeError &e)
+    {
         string msg = "";
         msg.append("Error while sending update request: ");
         msg.append(e.what());
@@ -471,21 +493,22 @@ void UpdateIp(const updater::ip * const ip, const string &url, const string &api
     string strBuf;
 
     // Reading response from buffer
-    while (buffer >> strBuf) {
+    while (buffer >> strBuf)
+    {
         resp += strBuf + " ";
     }
 
     // Long response indicates a problem
     if (resp.length() > 10)
     {
-        WriteLog("Error in update: " + resp, true);
         delete ip;
+        WriteLog("Error in update: " + resp, true);
         WRITE_EXIT;
         throw new exception;
     }
 }
 
-const updater::ip *QueryIpFromUrl(const string &url, const IpSource &source)
+const updater::ip *QueryIpFromRemote(const string &url, const IpSource &source)
 {
     if (source == IpSource::router)
     {
@@ -494,20 +517,23 @@ const updater::ip *QueryIpFromUrl(const string &url, const IpSource &source)
         throw new exception;
     }
 
-    curlpp::Easy handle;
+    curlpp::Easy *handle = new curlpp::Easy();
+    stringstream buffer;
 
-    std::stringstream buffer;
+    handle->setOpt(curlpp::Options::Url(url));
+    handle->setOpt(curlpp::Options::HttpGet(true));
+    handle->setOpt(curlpp::Options::SslVerifyHost(true));
+    handle->setOpt(curlpp::Options::SslVerifyPeer(false));
+    handle->setOpt(curlpp::Options::WriteStream(&buffer));
+    handle->setOpt(curlpp::Options::FailOnError(true));
 
-    handle.setOpt(curlpp::Options::Url(url));
-    handle.setOpt(curlpp::Options::HttpGet(true));
-    handle.setOpt(curlpp::Options::SslVerifyHost(false));
-    handle.setOpt(curlpp::Options::SslVerifyPeer(false));
-    handle.setOpt(curlpp::Options::WriteStream(&buffer));
-    handle.setOpt(curlpp::Options::FailOnError(true));
-
-    try {
-        handle.perform();
-    } catch (curlpp::RuntimeError &e) {
+    try
+    {
+        handle->perform();
+    }
+    catch (curlpp::RuntimeError &e)
+    {
+        delete handle;
         string msg = "";
         msg.append("Error while sending ip get request: ");
         msg.append(e.what());
@@ -516,15 +542,19 @@ const updater::ip *QueryIpFromUrl(const string &url, const IpSource &source)
         throw;
     }
 
-    string resp;
+    delete handle;
 
+    string resp;
     buffer >> resp;
 
     updater::ip *addr;
 
-    try {
+    try
+    {
         addr = new updater::ip(resp);
-    } catch (const std::exception &e) {
+    }
+    catch (const exception &e)
+    {
         string msg = "";
         msg.append("ERROR: Error while parsing current remote ip: ");
         msg.append(e.what());
@@ -536,14 +566,14 @@ const updater::ip *QueryIpFromUrl(const string &url, const IpSource &source)
     return addr;
 }
 
-void SaveIpToFile(const updater::ip * const ip, const string &path)
+void SaveIpToFile(const updater::ip *const ip, const string &path)
 {
     ofstream file;
-    file.open(*path, ios::out);
+    file.open(path, ios::out);
 
-    if (file.fail()) {
+    if (file.fail())
+    {
         WriteLog("ERROR: Failed to open ip record file. Ensure necessary resources and permissions are available for operation.", true);
-        delete path;
         WRITE_EXIT;
         throw new exception;
     }
@@ -552,15 +582,22 @@ void SaveIpToFile(const updater::ip * const ip, const string &path)
     file.close();
 }
 
-void RemoveSpaces(string &input)
+bool IsWhitespace(const char c)
 {
-    if (input == "") return;
+    return c == ' ' || c == '\n' || c == '\t' || c == '\r';
+}
+
+void RemoveWhitespace(string &input)
+{
+    if (input == "")
+        return;
 
     auto it = input.begin();
 
     while (it != input.end())
     {
-        if (*it == ' ' || *it == '\t' || *it == '\n' || *it == '\r') {
+        if (IsWhitespace(*it))
+        {
             input.erase(it);
         }
 

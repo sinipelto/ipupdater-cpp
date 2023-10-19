@@ -2,14 +2,34 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "preLaunchTask": "build-debug",
+      "name": "C/C++ Runner: Debug",
+      "type": "cppdbg",
+      "request": "launch",
+      "args": [],
+      "stopAtEntry": false,
+      "externalConsole": false,
+      "cwd": "/home/pelto/sources/repo-ipupdater/bin",
+      "program": "/home/pelto/sources/repo-ipupdater/bin/updater",
+      "MIMode": "gdb",
+      "miDebuggerPath": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    },
+    {
       "name": "C/C++ Runner: Debug Session",
       "type": "cppdbg",
       "request": "launch",
       "args": [],
       "stopAtEntry": false,
-      "externalConsole": true,
-      "cwd": "c:/Users/blafielt/source/repos/ipupdater-cpp",
-      "program": "c:/Users/blafielt/source/repos/ipupdater-cpp/build/updater.exe",
+      "externalConsole": false,
+      "cwd": "/home/pelto/sources/repo-ipupdater",
+      "program": "/home/pelto/sources/repo-ipupdater/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [
