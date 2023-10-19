@@ -10,8 +10,10 @@ sudo apt-get update
 sudo apt-get install -y curl
 sudo apt-get install -y libcurl3-gnutls
 sudo apt-get install -y libcurl4
-sudo apt-get install -y libcurl4-openssl-dev
-sudo apt-get install -y libcurlpp-dev
-sudo apt-get install -y libcurlpp0
+
+#sudo apt-get install -y libcurl4-openssl-dev
+
+#sudo apt-get install -y libcurlpp-dev
+#sudo apt-get install -y libcurlpp0
 
 echo "Dependencies installed."
