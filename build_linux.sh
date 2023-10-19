@@ -1,13 +1,14 @@
 #!/bin/sh
 
 # Ensure bin/ exists
-mkdir bin
+mkdir bin || true
 
 # Clean bin/ of any old stuff
 rm -r bin/*
+rm -r bin/.*
 
 # Copy stuff from skeleton for the program
-cp -R skeleton/* bin/
+cp -rT skeleton/ bin/
 
 # Compile the program with optimization using g++
-g++ -Wall -o bin/updater -I . -Ofast $(find . -iname "*.cpp") -lcurl
+g++ -Wall -Wextra -Wpedantic -o bin/updater -I . -I include -Ofast "$(find . -iname '*.cpp')" libcurl.a
