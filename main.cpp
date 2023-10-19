@@ -3,6 +3,12 @@
 // Reads and parses configuration parameters from configuration file.
 
 #include "ip.hh"
+#include "curl/curl.h"
+#include "curlpp/cURLpp.hpp"
+#include "curlpp/Easy.hpp"
+#include "curlpp/Option.hpp"
+#include "curlpp/Options.hpp"
+#include "curlpp/Form.hpp"
 #include <iostream>
 #include <iomanip>
 #include <string>
@@ -12,36 +18,34 @@
 #include <chrono>
 #include <ctime>
 #include <locale>
-#include <curl/curl.h>
-#include <curlpp/cURLpp.hpp>
-#include <curlpp/Easy.hpp>
-#include <curlpp/Option.hpp>
-#include <curlpp/Options.hpp>
-#include <curlpp/Form.hpp>
 
 using namespace std;
 
-enum IpSource {external, router};
+using StrMap = map<string, string>;
+using StrPair = pair<string, string>;
+using StrVec = vector<string>;
+
+enum IpSource { external, router };
 
 string &ProcessPath(string &path);
 
-map<string, string> *ReadConfiguration(const string * const path);
+StrMap *ReadConfiguration(const string &path);
 
-const updater::ip *ReadIpFromFile(const string * const path);
+const updater::ip *ReadIpFromFile(const string &path);
 const updater::ip *QueryIpFromUrl(const string &url, const IpSource &source);
 
 void UpdateIp(const updater::ip * const ip, const string &url, const string &apikey, const string &apisecret);
-void SaveIpToFile(const updater::ip * const ip, const string * const path);
+void SaveIpToFile(const updater::ip * const ip, const string &path);
 
-std::pair<string, string> ParseLine(const string &line);
+StrPair ParseLine(const string &line);
 void RemoveSpaces(string &input);
 bool ParseBool(const string &input);
-std::vector<string> ParseList(string input, const string &delimiter);
+StrVec ParseList(string input, const string &delimiter);
 
-void WriteChangeLog(const string * const path, const updater::ip *oldIp, const updater::ip *newIp);
+void WriteChangeLog(const string &path, const updater::ip * const oldIp, const updater::ip * const newIp);
 void WriteLog(const string &message, const bool &use_cerr=false);
 
-int Terminate(const int &code);
+const int &Terminate(const int &code) const;
 
 // Separating line for logging
 #define WRITE_EXIT WriteLog("---------------------------------------------------------")
@@ -74,9 +78,9 @@ int main(int argc, char **argv)
 #endif
     LogPath = basePath + LogPath;
 
-    map<string, string> *config;
+    const string configPath = basePath + configFile;
 
-    const string * const configPath = new string(basePath + configFile);
+    StrMap *config;
 
     try {
         config = ReadConfiguration(configPath);
@@ -89,14 +93,12 @@ int main(int argc, char **argv)
         throw;
     }
 
-    delete configPath;
-
     // Read variables from configuration
     const string domain = config->at("domain");
     const string api_key = config->at("api_key");
     const string api_secret = config->at("api_secret");
 
-    const vector<string> record_list = ParseList(config->at("record_list"), ",");
+    StrVec record_list = ParseList(config->at("record_list"), ",");
 
     const string ip_url = config->at("ip_url");
     const string api_url_base = config->at("api_url");
@@ -120,7 +122,7 @@ int main(int argc, char **argv)
     }
 
     // Load last ip from record file
-    const string * const lastIpPath = new string(basePath + lastipFile);
+    const string lastIpPath = basePath + lastipFile;
     const updater::ip *local_ip = ReadIpFromFile(lastIpPath);
 
     // Query current ip
@@ -210,7 +212,7 @@ bool ParseBool(const string &input)
 
     for (char c : input) {
         if (c == ' ' || c == '\n' || c == '\t' || c == '\r') continue;
-        parsed += std::tolower(c, *new locale());
+        parsed += std::tolower(c);
     }
 
     if (parsed == "")
@@ -224,9 +226,9 @@ bool ParseBool(const string &input)
     return false;
 }
 
-vector<string> ParseList(string input, const string &delimiter)
+StrVec ParseList(string input, const string &delimiter)
 {
-    vector<string> options = {};
+    StrVec options = {};
 
     size_t pos = 0;
 
@@ -245,7 +247,7 @@ vector<string> ParseList(string input, const string &delimiter)
     return options;
 }
 
-int Terminate(const int &code)
+const int &Terminate(const int &code) const
 {
     curlpp::terminate();
     WRITE_EXIT;
@@ -301,7 +303,7 @@ void WriteLog(const string &message, const bool &use_cerr)
     cout << put_time(localtime(&now), stampFormat) << message << endl;
 }
 
-void WriteChangeLog(const string * const path, const updater::ip *oldIp, const updater::ip *newIp)
+void WriteChangeLog(const string &path, const updater::ip * const oldIp, const updater::ip * const newIp)
 {
     // Set time parse format string
     const char *stampFormat = "[%Y-%m-%d %H:%M:%S] ";
@@ -312,12 +314,12 @@ void WriteChangeLog(const string * const path, const updater::ip *oldIp, const u
     ostringstream ostring;
 
     ofstream logFile;
-    logFile.open(*path, ios::app);
+    logFile.open(path, ios::app);
 
     if (logFile.fail())
     {
         WriteLog("WARNING: Failed to open record file. Trying to create new one..", true);
-        logFile.open(*path);
+        logFile.open(path);
 
         if (logFile.fail())
         {
@@ -333,7 +335,7 @@ void WriteChangeLog(const string * const path, const updater::ip *oldIp, const u
 }
 
 
-std::pair<string, string> ParseLine(const string &line)
+StrPair ParseLine(const string &line)
 {
     pair<string, string> keyvalue;
 
@@ -359,12 +361,12 @@ std::pair<string, string> ParseLine(const string &line)
     return keyvalue;
 }
 
-map<string, string> *ReadConfiguration(const string * const path)
+StrMap &ReadConfiguration(const string &path)
 {
-    map<string, string> *settings = new map<string, string>();
+    StrMap settings = StrMap();
 
     ifstream file;
-    file.open(*path);
+    file.open(path);
 
     if (file.fail())
     {
@@ -390,17 +392,17 @@ map<string, string> *ReadConfiguration(const string * const path)
     return settings;
 }
 
-const updater::ip *ReadIpFromFile(const string * const path)
+const updater::ip *ReadIpFromFile(const string &path)
 {
     ifstream file;
-    file.open(*path);
+    file.open(path);
 
     if (file.fail())
     {
         WriteLog("WARNING: Failed to open IP record file. Trying to create new one with zero record..", true);
 
         ofstream out;
-        out.open(*path);
+        out.open(path);
 
         if (out.fail()) {
             WriteLog("ERROR: Failed to create ip record. Cannot continue.", true);
@@ -534,7 +536,7 @@ const updater::ip *QueryIpFromUrl(const string &url, const IpSource &source)
     return addr;
 }
 
-void SaveIpToFile(const updater::ip * const ip, const string * const path)
+void SaveIpToFile(const updater::ip * const ip, const string &path)
 {
     ofstream file;
     file.open(*path, ios::out);
