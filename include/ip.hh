@@ -14,7 +14,7 @@ public:
     ip();
     ip(std::string dotted_decimal);
     ip(const unsigned char &a, const unsigned char &b, const unsigned char &c, const unsigned char &d);
-    std::string toString() const;
+    const std::string toString() const;
     std::vector<unsigned char> getDecimals() const;
     bool operator==(const ip &other) const;
 private:
